@@ -1,0 +1,6 @@
+@Sphere.Api_HostAddress = http://localhost:5170
+
+GET {{Sphere.Api_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###

@@ -1,0 +1,312 @@
+using System.Data;
+using Dapper;
+using Sphere.Application.DTOs.Auth;
+using Sphere.Application.Interfaces.Repositories;
+
+namespace Sphere.Infrastructure.Persistence.Repositories.Dapper;
+
+/// <summary>
+/// Auth repository implementation using Dapper for stored procedures and raw SQL.
+/// </summary>
+public class AuthRepository : DapperRepositoryBase, IAuthRepository
+{
+    public AuthRepository(IDbConnection connection) : base(connection) { }
+
+    #region User Authentication Methods
+
+    /// <inheritdoc />
+    public async Task<LoginUserInfoDto?> GetLoginUserInfoAsync(
+        string userId,
+        string divSeq,
+        CancellationToken cancellationToken = default)
+    {
+        // Complex join query to get user info with organization and authority
+        const string sql = @"
+            SELECT
+                u.USER_ID AS UserId,
+                u.USER_NAME AS UserName,
+                u.EMAIL AS Email,
+                u.PASSWORD_HASH AS PasswordHash,
+                u.LAST_LOGIN_DATE AS LastLoginDate,
+                u.DIV_SEQ AS DivSeq,
+                d.DIV_NAME AS DivName,
+                u.DEPT_ID AS DeptId,
+                dept.DEPT_NAME AS DeptName,
+                u.POSITION_ID AS PositionId,
+                pos.POSITION_NAME AS PositionName,
+                u.VENDOR_ID AS VendorId,
+                v.VENDOR_NAME AS VendorName,
+                v.VENDOR_TYPE AS VendorType,
+                CASE WHEN u.AUTHORITY_LEVEL >= 9 THEN 1 ELSE 0 END AS IsAdmin,
+                u.ROLE_ID AS RoleId,
+                r.ROLE_NAME AS RoleName,
+                COALESCE(u.LOCALE, 'ko-KR') AS Locale,
+                COALESCE(u.TIMEZONE, 'Asia/Seoul') AS TimeZone,
+                COALESCE(u.DATE_FORMAT, 'yyyy-MM-dd') AS DateFormat,
+                COALESCE(u.NUMBER_FORMAT, '#,##0.##') AS NumberFormat
+            FROM SPC_USER_INFO u
+            LEFT JOIN SPC_DIVISION_INFO d ON u.DIV_SEQ = d.DIV_SEQ
+            LEFT JOIN SPC_DEPT_INFO dept ON u.DEPT_ID = dept.DEPT_ID AND u.DIV_SEQ = dept.DIV_SEQ
+            LEFT JOIN SPC_POSITION_INFO pos ON u.POSITION_ID = pos.POSITION_ID AND u.DIV_SEQ = pos.DIV_SEQ
+            LEFT JOIN SPC_VENDOR_INFO v ON u.VENDOR_ID = v.VENDOR_ID AND u.DIV_SEQ = v.DIV_SEQ
+            LEFT JOIN SPC_ROLE_INFO r ON u.ROLE_ID = r.ROLE_ID AND u.DIV_SEQ = r.DIV_SEQ
+            WHERE u.USER_ID = @UserId
+              AND u.DIV_SEQ = @DivSeq
+              AND u.USE_YN = 'Y'";
+
+        var command = new CommandDefinition(
+            sql,
+            new { UserId = userId, DivSeq = divSeq },
+            cancellationToken: cancellationToken);
+
+        return await _connection.QueryFirstOrDefaultAsync<LoginUserInfoDto>(command);
+    }
+
+    /// <inheritdoc />
+    public async Task<UserInfoDto?> GetUserInfoByIdAsync(
+        string userId,
+        string divSeq,
+        CancellationToken cancellationToken = default)
+    {
+        const string sql = @"
+            SELECT
+                u.USER_ID AS UserId,
+                u.USER_NAME AS UserName,
+                u.USER_NAME_K AS UserNameK,
+                u.USER_NAME_E AS UserNameE,
+                u.EMAIL AS Email,
+                u.DIV_SEQ AS DivSeq,
+                u.DEPT_ID AS DeptId,
+                dept.DEPT_NAME AS DeptName,
+                u.POSITION_ID AS PositionId,
+                pos.POSITION_NAME AS PositionName,
+                u.VENDOR_ID AS VendorId,
+                u.ROLE_ID AS RoleId,
+                u.USER_GROUP_ID AS UserGroupId,
+                u.AUTHORITY_LEVEL AS AuthorityLevel,
+                u.PHONE_NUMBER AS PhoneNumber,
+                u.MOBILE_NUMBER AS MobileNumber,
+                u.EXTENSION AS Extension,
+                u.USE_YN AS UseYn,
+                u.CREATE_DATE AS CreateDate,
+                u.UPDATE_DATE AS UpdateDate
+            FROM SPC_USER_INFO u
+            LEFT JOIN SPC_DEPT_INFO dept ON u.DEPT_ID = dept.DEPT_ID AND u.DIV_SEQ = dept.DIV_SEQ
+            LEFT JOIN SPC_POSITION_INFO pos ON u.POSITION_ID = pos.POSITION_ID AND u.DIV_SEQ = pos.DIV_SEQ
+            WHERE u.USER_ID = @UserId
+              AND u.DIV_SEQ = @DivSeq";
+
+        var command = new CommandDefinition(
+            sql,
+            new { UserId = userId, DivSeq = divSeq },
+            cancellationToken: cancellationToken);
+
+        return await _connection.QueryFirstOrDefaultAsync<UserInfoDto>(command);
+    }
+
+    /// <inheritdoc />
+    public async Task<bool> ValidatePasswordAsync(
+        string userId,
+        string passwordHash,
+        CancellationToken cancellationToken = default)
+    {
+        const string sql = @"
+            SELECT COUNT(1)
+            FROM SPC_USER_INFO
+            WHERE USER_ID = @UserId
+              AND PASSWORD_HASH = @PasswordHash
+              AND USE_YN = 'Y'";
+
+        var command = new CommandDefinition(
+            sql,
+            new { UserId = userId, PasswordHash = passwordHash },
+            cancellationToken: cancellationToken);
+
+        var count = await _connection.ExecuteScalarAsync<int>(command);
+        return count > 0;
+    }
+
+    /// <inheritdoc />
+    public async Task UpdateLastLoginAsync(
+        string userId,
+        DateTime loginTime,
+        CancellationToken cancellationToken = default)
+    {
+        const string sql = @"
+            UPDATE SPC_USER_INFO
+            SET LAST_LOGIN_DATE = @LoginTime,
+                UPDATE_DATE = @LoginTime
+            WHERE USER_ID = @UserId";
+
+        var command = new CommandDefinition(
+            sql,
+            new { UserId = userId, LoginTime = loginTime },
+            cancellationToken: cancellationToken);
+
+        await _connection.ExecuteAsync(command);
+    }
+
+    #endregion
+
+    #region Authority Filter Methods
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// DB USP: USP_SPC_AUTHORITY_FILTER_SELECT
+    /// DB params: @P_Lang_Type, @P_div_seq, @P_login_vendor, @P_filter_type, @P_vendor_list, @P_mtrlclass_list
+    /// </remarks>
+    public async Task<IEnumerable<AuthorityFilterResultDto>> GetAuthorityFiltersAsync(
+        AuthorityFilterRequestDto query,
+        CancellationToken cancellationToken = default)
+    {
+        var parameters = new DynamicParameters();
+        parameters.Add("P_Lang_Type", query.Language ?? "ko-KR");
+        parameters.Add("P_div_seq", query.DivSeq);
+        parameters.Add("P_login_vendor", query.UserId ?? string.Empty);
+        parameters.Add("P_filter_type", query.CodeClassId ?? string.Empty);
+        parameters.Add("P_vendor_list", string.Empty);
+        parameters.Add("P_mtrlclass_list", string.Empty);
+
+        var command = new CommandDefinition(
+            "USP_SPC_AUTHORITY_FILTER_SELECT",
+            parameters,
+            commandType: CommandType.StoredProcedure,
+            cancellationToken: cancellationToken);
+
+        return await _connection.QueryAsync<AuthorityFilterResultDto>(command);
+    }
+
+    #endregion
+
+    #region Oath Management Methods
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// DB USP: USP_SPC_OATH_MST_SELECT
+    /// DB params: @P_Lang_Type, @P_div_seq, @P_start_date, @P_end_date, @P_req_vendor_id,
+    ///            @P_accept_vendor_id, @P_doc_type, @P_action_id, @P_oath_id, @P_search_option
+    /// </remarks>
+    public async Task<IEnumerable<OathMasterDto>> GetOathMasterListAsync(
+        OathMasterFilterDto filter,
+        CancellationToken cancellationToken = default)
+    {
+        var parameters = new DynamicParameters();
+        parameters.Add("P_Lang_Type", "ko-KR");
+        parameters.Add("P_div_seq", filter.DivSeq);
+        parameters.Add("P_start_date", string.Empty);
+        parameters.Add("P_end_date", string.Empty);
+        parameters.Add("P_req_vendor_id", filter.RequestVendor ?? string.Empty);
+        parameters.Add("P_accept_vendor_id", filter.AcceptVendor ?? string.Empty);
+        parameters.Add("P_doc_type", filter.OathDocId ?? string.Empty);
+        parameters.Add("P_action_id", string.Empty);
+        parameters.Add("P_oath_id", string.Empty);
+        parameters.Add("P_search_option", filter.CompleteOath ?? string.Empty);
+
+        var command = new CommandDefinition(
+            "USP_SPC_OATH_MST_SELECT",
+            parameters,
+            commandType: CommandType.StoredProcedure,
+            cancellationToken: cancellationToken);
+
+        return await _connection.QueryAsync<OathMasterDto>(command);
+    }
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// DB USP: USP_SPC_OATH_MST_SELECT_LOGIN
+    /// DB params: @P_Lang_Type, @P_div_seq, @P_vendor_id, @P_sysmanager_flag
+    /// </remarks>
+    public async Task<IEnumerable<OathLoginDto>> GetOathForLoginAsync(
+        string divSeq,
+        string userId,
+        CancellationToken cancellationToken = default)
+    {
+        var parameters = new DynamicParameters();
+        parameters.Add("P_Lang_Type", "ko-KR");
+        parameters.Add("P_div_seq", divSeq);
+        parameters.Add("P_vendor_id", userId);
+        parameters.Add("P_sysmanager_flag", string.Empty);
+
+        var command = new CommandDefinition(
+            "USP_SPC_OATH_MST_SELECT_LOGIN",
+            parameters,
+            commandType: CommandType.StoredProcedure,
+            cancellationToken: cancellationToken);
+
+        return await _connection.QueryAsync<OathLoginDto>(command);
+    }
+
+    /// <inheritdoc />
+    public async Task<OathLoginLinkDto?> GetOathLoginLinkAsync(
+        string divSeq,
+        string oathId,
+        CancellationToken cancellationToken = default)
+    {
+        var sql = @"
+            SELECT
+                CONVERT(VARCHAR(20), om.create_date, 120) AS start_date,
+                om.expire_time AS end_date,
+                om.request_vendor AS req_vendor,
+                om.accept_vendor,
+                om.oath_doc_id AS oath_doc_type,
+                om.oath_action_id
+            FROM SPC_OATH_MST om
+            WHERE om.div_seq = @div_seq AND om.oath_id = @oath_id";
+
+        return await QueryFirstOrDefaultRawSqlAsync<OathLoginLinkDto>(sql, new
+        {
+            div_seq = divSeq,
+            oath_id = oathId
+        });
+    }
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// DB USP: USP_SPC_OATH_MST_HIST_SELECT
+    /// DB params: @P_Lang_Type, @P_div_seq, @P_oath_id
+    /// </remarks>
+    public async Task<IEnumerable<OathHistoryDto>> GetOathHistoryAsync(
+        string divSeq,
+        string oathId,
+        CancellationToken cancellationToken = default)
+    {
+        var parameters = new DynamicParameters();
+        parameters.Add("P_Lang_Type", "ko-KR");
+        parameters.Add("P_div_seq", divSeq);
+        parameters.Add("P_oath_id", oathId);
+
+        var command = new CommandDefinition(
+            "USP_SPC_OATH_MST_HIST_SELECT",
+            parameters,
+            commandType: CommandType.StoredProcedure,
+            cancellationToken: cancellationToken);
+
+        return await _connection.QueryAsync<OathHistoryDto>(command);
+    }
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// DB USP: USP_SPC_OATH_DOC_SELECT
+    /// DB params: @P_div_seq, @P_oath_id
+    /// Note: The SP uses @P_oath_id (not @P_oath_doc_id).
+    /// </remarks>
+    public async Task<OathDocumentDto?> GetOathDocumentAsync(
+        string divSeq,
+        string oathDocId,
+        CancellationToken cancellationToken = default)
+    {
+        var parameters = new DynamicParameters();
+        parameters.Add("P_div_seq", divSeq);
+        parameters.Add("P_oath_id", oathDocId);
+
+        var command = new CommandDefinition(
+            "USP_SPC_OATH_DOC_SELECT",
+            parameters,
+            commandType: CommandType.StoredProcedure,
+            cancellationToken: cancellationToken);
+
+        return await _connection.QueryFirstOrDefaultAsync<OathDocumentDto>(command);
+    }
+
+    #endregion
+}
