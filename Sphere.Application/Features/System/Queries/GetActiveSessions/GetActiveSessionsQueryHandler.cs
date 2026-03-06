@@ -1,6 +1,5 @@
 using MediatR;
 using Microsoft.Extensions.Logging;
-using Sphere.Application.Common.Interfaces;
 using Sphere.Application.Common.Models;
 using Sphere.Application.DTOs.System;
 
@@ -11,14 +10,10 @@ namespace Sphere.Application.Features.System.Queries.GetActiveSessions;
 /// </summary>
 public class GetActiveSessionsQueryHandler : IRequestHandler<GetActiveSessionsQuery, Result<ActiveSessionResponseDto>>
 {
-    private readonly IApplicationDbContext _context;
     private readonly ILogger<GetActiveSessionsQueryHandler> _logger;
 
-    public GetActiveSessionsQueryHandler(
-        IApplicationDbContext context,
-        ILogger<GetActiveSessionsQueryHandler> logger)
+    public GetActiveSessionsQueryHandler(ILogger<GetActiveSessionsQueryHandler> logger)
     {
-        _context = context;
         _logger = logger;
     }
 

@@ -1,7 +1,4 @@
 <Solution>
-  <Project Path="../tests/Sphere.Api.Tests/Sphere.Api.Tests.csproj" />
-  <Project Path="../tests/Sphere.Application.Tests/Sphere.Application.Tests.csproj" />
-  <Project Path="../tests/Sphere.Domain.Tests/Sphere.Domain.Tests.csproj" />
   <Project Path="Sphere.Api/Sphere.Api.csproj" />
   <Project Path="Sphere.Application/Sphere.Application.csproj" />
   <Project Path="Sphere.Domain/Sphere.Domain.csproj" />

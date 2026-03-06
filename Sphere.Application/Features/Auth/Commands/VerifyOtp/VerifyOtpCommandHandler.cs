@@ -1,9 +1,9 @@
 using MediatR;
-using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Sphere.Application.Common.Interfaces;
 using Sphere.Application.Common.Models;
 using Sphere.Application.DTOs.Auth;
+using Sphere.Application.Interfaces.Repositories;
 
 namespace Sphere.Application.Features.Auth.Commands.VerifyOtp;
 
@@ -12,20 +12,20 @@ namespace Sphere.Application.Features.Auth.Commands.VerifyOtp;
 /// </summary>
 public class VerifyOtpCommandHandler : IRequestHandler<VerifyOtpCommand, Result<LoginResponseDto>>
 {
-    private readonly IApplicationDbContext _context;
+    private readonly IAuthRepository _authRepository;
     private readonly IJwtTokenService _jwtTokenService;
     private readonly IOtpService _otpService;
     private readonly IDateTimeService _dateTimeService;
     private readonly ILogger<VerifyOtpCommandHandler> _logger;
 
     public VerifyOtpCommandHandler(
-        IApplicationDbContext context,
+        IAuthRepository authRepository,
         IJwtTokenService jwtTokenService,
         IOtpService otpService,
         IDateTimeService dateTimeService,
         ILogger<VerifyOtpCommandHandler> logger)
     {
-        _context = context;
+        _authRepository = authRepository;
         _jwtTokenService = jwtTokenService;
         _otpService = otpService;
         _dateTimeService = dateTimeService;
@@ -36,7 +36,6 @@ public class VerifyOtpCommandHandler : IRequestHandler<VerifyOtpCommand, Result<
     {
         _logger.LogInformation("OTP verification attempt for session {SessionId}", request.OtpSessionId);
 
-        // 1. Validate OTP session
         var otpValidation = await _otpService.ValidateOtpAsync(
             request.OtpSessionId,
             request.OtpCode,
@@ -48,24 +47,17 @@ public class VerifyOtpCommandHandler : IRequestHandler<VerifyOtpCommand, Result<
             return Result<LoginResponseDto>.Failure(otpValidation.FailureReason ?? "Invalid OTP code.");
         }
 
-        // 2. Find user
-        var user = await _context.UserInfos
-            .Where(u => u.DivSeq == request.DivSeq && u.UserId == request.UserId && u.UseYn == "Y")
-            .FirstOrDefaultAsync(cancellationToken);
+        var user = await _authRepository.GetUserForAuthAsync(request.UserId, request.DivSeq, cancellationToken);
 
-        if (user is null)
+        if (user is null || user.UseYn != "Y")
         {
             _logger.LogWarning("OTP verification failed: User {UserId} not found", request.UserId);
             return Result<LoginResponseDto>.Failure("User not found.");
         }
 
-        // 3. Load user permissions
-        var permissions = await _context.RolePermissions
-            .Where(rp => rp.DivSeq == request.DivSeq && rp.RoleCode == user.RoleId && rp.GrantedYn == "Y")
-            .Select(rp => $"{rp.ResourceType}:{rp.ResourceId}:{rp.ActionType}")
-            .ToListAsync(cancellationToken);
+        var permissions = (await _authRepository.GetRolePermissionsAsync(
+            request.DivSeq, user.RoleId ?? string.Empty, cancellationToken)).ToList();
 
-        // 4. Generate tokens
         var userProfile = new UserProfileDto
         {
             UserId = user.UserId,
@@ -83,11 +75,7 @@ public class VerifyOtpCommandHandler : IRequestHandler<VerifyOtpCommand, Result<
 
         var (accessToken, refreshToken, expiresAt) = _jwtTokenService.GenerateTokens(userProfile);
 
-        // 5. Update last login
-        user.LastLoginDate = _dateTimeService.Now;
-        await _context.SaveChangesAsync(cancellationToken);
-
-        // 6. Clear OTP session
+        await _authRepository.UpdateLastLoginAsync(user.UserId, _dateTimeService.Now, cancellationToken);
         await _otpService.ClearOtpSessionAsync(request.OtpSessionId, cancellationToken);
 
         _logger.LogInformation("OTP verification successful for user {UserId}", request.UserId);

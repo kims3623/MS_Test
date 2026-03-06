@@ -1,8 +1,7 @@
 using MediatR;
-using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
-using Sphere.Application.Common.Interfaces;
 using Sphere.Application.Common.Models;
+using Sphere.Application.Interfaces.Repositories;
 
 namespace Sphere.Application.Features.Auth.Queries.GetLoginHistory;
 
@@ -11,14 +10,14 @@ namespace Sphere.Application.Features.Auth.Queries.GetLoginHistory;
 /// </summary>
 public class GetLoginHistoryQueryHandler : IRequestHandler<GetLoginHistoryQuery, Result<GetLoginHistoryResponse>>
 {
-    private readonly IApplicationDbContext _context;
+    private readonly IAuthRepository _authRepository;
     private readonly ILogger<GetLoginHistoryQueryHandler> _logger;
 
     public GetLoginHistoryQueryHandler(
-        IApplicationDbContext context,
+        IAuthRepository authRepository,
         ILogger<GetLoginHistoryQueryHandler> logger)
     {
-        _context = context;
+        _authRepository = authRepository;
         _logger = logger;
     }
 
@@ -26,10 +25,7 @@ public class GetLoginHistoryQueryHandler : IRequestHandler<GetLoginHistoryQuery,
     {
         _logger.LogInformation("Getting login history for user {UserId}", request.UserId);
 
-        // 1. Verify user exists
-        var user = await _context.UserInfos
-            .Where(u => u.DivSeq == request.DivSeq && u.UserId == request.UserId)
-            .FirstOrDefaultAsync(cancellationToken);
+        var user = await _authRepository.GetUserForAuthAsync(request.UserId, request.DivSeq, cancellationToken);
 
         if (user is null)
         {
@@ -37,10 +33,8 @@ public class GetLoginHistoryQueryHandler : IRequestHandler<GetLoginHistoryQuery,
             return Result<GetLoginHistoryResponse>.Failure("User not found.");
         }
 
-        // 2. Return login history from UserInfo's last login date
-        // Note: Current DB schema doesn't have a separate login history table
+        // Current DB schema doesn't have a separate login history table - return last login from UserInfo
         var items = new List<LoginHistoryItem>();
-
         if (user.LastLoginDate.HasValue)
         {
             items.Add(new LoginHistoryItem

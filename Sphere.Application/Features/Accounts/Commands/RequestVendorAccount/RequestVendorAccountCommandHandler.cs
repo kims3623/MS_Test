@@ -1,10 +1,9 @@
 using MediatR;
-using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Sphere.Application.Common.Interfaces;
 using Sphere.Application.Common.Models;
 using Sphere.Application.DTOs.Account;
-using Sphere.Domain.Entities.Auth;
+using Sphere.Application.Interfaces.Repositories;
 
 namespace Sphere.Application.Features.Accounts.Commands.RequestVendorAccount;
 
@@ -15,16 +14,16 @@ namespace Sphere.Application.Features.Accounts.Commands.RequestVendorAccount;
 public class RequestVendorAccountCommandHandler
     : IRequestHandler<RequestVendorAccountCommand, Result<VendorAccountRequestResultDto>>
 {
-    private readonly IApplicationDbContext _context;
+    private readonly IAccountRepository _accountRepository;
     private readonly IDateTimeService _dateTimeService;
     private readonly ILogger<RequestVendorAccountCommandHandler> _logger;
 
     public RequestVendorAccountCommandHandler(
-        IApplicationDbContext context,
+        IAccountRepository accountRepository,
         IDateTimeService dateTimeService,
         ILogger<RequestVendorAccountCommandHandler> logger)
     {
-        _context = context;
+        _accountRepository = accountRepository;
         _dateTimeService = dateTimeService;
         _logger = logger;
     }
@@ -40,43 +39,27 @@ public class RequestVendorAccountCommandHandler
 
         try
         {
-            // Check for duplicate requests with the same email
-            var existingRequest = await _context.VendorAccountRequests
-                .FirstOrDefaultAsync(r =>
-                    r.ContactEmail == request.ContactEmail &&
-                    r.Status == "PENDING" &&
-                    r.UseYn == "Y",
-                    cancellationToken);
-
-            if (existingRequest != null)
+            var hasPending = await _accountRepository.HasPendingRequestByEmailAsync(request.ContactEmail, cancellationToken);
+            if (hasPending)
             {
                 return Result<VendorAccountRequestResultDto>.Failure(
                     "이미 동일한 이메일로 대기 중인 계정 요청이 있습니다.");
             }
 
-            // Generate request ID
             var requestId = $"VAR{_dateTimeService.Now:yyyyMMddHHmmss}{Guid.NewGuid().ToString("N")[..6].ToUpper()}";
+            var divSeq = string.IsNullOrEmpty(request.DivSeq) ? "01" : request.DivSeq;
 
-            // Create VendorAccountRequest entity
-            var entity = new VendorAccountRequest
-            {
-                RequestId = requestId,
-                VendorName = request.VendorName,
-                VendorId = request.VendorId,
-                ContactName = request.ContactPerson,
-                ContactEmail = request.ContactEmail,
-                ContactPhone = request.ContactPhone,
-                Description = request.RequestReason,
-                Status = "PENDING",
-                RequestedAt = _dateTimeService.Now,
-                DivSeq = string.IsNullOrEmpty(request.DivSeq) ? "01" : request.DivSeq,
-                UseYn = "Y",
-                CreateDate = _dateTimeService.Now,
-                CreateUserId = "SYSTEM"
-            };
-
-            await _context.VendorAccountRequests.AddAsync(entity, cancellationToken);
-            await _context.SaveChangesAsync(cancellationToken);
+            await _accountRepository.InsertVendorAccountRequestAsync(
+                divSeq,
+                requestId,
+                request.VendorName,
+                request.VendorId,
+                request.ContactPerson,
+                request.ContactEmail,
+                request.ContactPhone,
+                request.RequestReason,
+                _dateTimeService.Now,
+                cancellationToken);
 
             _logger.LogInformation(
                 "Vendor account request {RequestId} created successfully for {VendorName}",

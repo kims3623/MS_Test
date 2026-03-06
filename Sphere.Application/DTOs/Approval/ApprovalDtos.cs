@@ -92,6 +92,7 @@ public class ApprovalCreateDto
 public class ApprovalDetailDto
 {
     public string AprovId { get; set; } = string.Empty;
+    public string DivSeq { get; set; } = string.Empty;
     public string ChgTypeId { get; set; } = string.Empty;
     public string ChgTypeName { get; set; } = string.Empty;
     public string AprovActionId { get; set; } = string.Empty;
@@ -101,6 +102,11 @@ public class ApprovalDetailDto
     public string UpdateUserId { get; set; } = string.Empty;
     public string UpdateDate { get; set; } = string.Empty;
     public string Description { get; set; } = string.Empty;
+    public string Title { get; set; } = string.Empty;
+    public string Contents { get; set; } = string.Empty;
+    public string Writer { get; set; } = string.Empty;
+    public string AprovState { get; set; } = string.Empty;
+    public string CreateDate { get; set; } = string.Empty;
 }
 
 /// <summary>

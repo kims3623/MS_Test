@@ -1,6 +1,5 @@
 using MediatR;
 using Microsoft.Extensions.Logging;
-using Sphere.Application.Common.Interfaces;
 using Sphere.Application.Common.Models;
 using Sphere.Application.DTOs.System;
 
@@ -11,14 +10,10 @@ namespace Sphere.Application.Features.System.Commands.CreateRole;
 /// </summary>
 public class CreateRoleCommandHandler : IRequestHandler<CreateRoleCommand, Result<CreateRoleResponseDto>>
 {
-    private readonly IApplicationDbContext _context;
     private readonly ILogger<CreateRoleCommandHandler> _logger;
 
-    public CreateRoleCommandHandler(
-        IApplicationDbContext context,
-        ILogger<CreateRoleCommandHandler> logger)
+    public CreateRoleCommandHandler(ILogger<CreateRoleCommandHandler> logger)
     {
-        _context = context;
         _logger = logger;
     }
 

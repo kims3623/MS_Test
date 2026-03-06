@@ -1,8 +1,8 @@
 using MediatR;
-using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Sphere.Application.Common.Interfaces;
 using Sphere.Application.Common.Models;
+using Sphere.Application.Interfaces.Repositories;
 
 namespace Sphere.Application.Features.Auth.Commands.Logout;
 
@@ -11,16 +11,16 @@ namespace Sphere.Application.Features.Auth.Commands.Logout;
 /// </summary>
 public class LogoutCommandHandler : IRequestHandler<LogoutCommand, Result>
 {
-    private readonly IApplicationDbContext _context;
+    private readonly IAuthRepository _authRepository;
     private readonly IJwtTokenService _jwtTokenService;
     private readonly ILogger<LogoutCommandHandler> _logger;
 
     public LogoutCommandHandler(
-        IApplicationDbContext context,
+        IAuthRepository authRepository,
         IJwtTokenService jwtTokenService,
         ILogger<LogoutCommandHandler> logger)
     {
-        _context = context;
+        _authRepository = authRepository;
         _jwtTokenService = jwtTokenService;
         _logger = logger;
     }
@@ -29,21 +29,15 @@ public class LogoutCommandHandler : IRequestHandler<LogoutCommand, Result>
     {
         _logger.LogInformation("Logout request for user {UserId}", request.UserId);
 
-        // Revoke refresh token if provided
         if (!string.IsNullOrEmpty(request.RefreshToken))
         {
             await _jwtTokenService.RevokeTokenAsync(request.RefreshToken);
         }
 
-        // Invalidate user session
-        var session = await _context.UserSessions
-            .Where(s => s.DivSeq == request.DivSeq && s.UserId == request.UserId && s.IsActive == "Y")
-            .FirstOrDefaultAsync(cancellationToken);
-
+        var session = await _authRepository.GetActiveSessionAsync(request.UserId, request.DivSeq, cancellationToken);
         if (session is not null)
         {
-            session.IsActive = "N";
-            await _context.SaveChangesAsync(cancellationToken);
+            await _authRepository.UpdateSessionActiveAsync(request.UserId, request.DivSeq, "N", cancellationToken);
         }
 
         _logger.LogInformation("Logout successful for user {UserId}", request.UserId);

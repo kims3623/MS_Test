@@ -1,9 +1,8 @@
 using MediatR;
-using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
-using Sphere.Application.Common.Interfaces;
 using Sphere.Application.Common.Models;
 using Sphere.Application.DTOs.Auth;
+using Sphere.Application.Interfaces.Repositories;
 
 namespace Sphere.Application.Features.Auth.Queries.GetCurrentUser;
 
@@ -12,14 +11,14 @@ namespace Sphere.Application.Features.Auth.Queries.GetCurrentUser;
 /// </summary>
 public class GetCurrentUserQueryHandler : IRequestHandler<GetCurrentUserQuery, Result<UserProfileDto>>
 {
-    private readonly IApplicationDbContext _context;
+    private readonly IAuthRepository _authRepository;
     private readonly ILogger<GetCurrentUserQueryHandler> _logger;
 
     public GetCurrentUserQueryHandler(
-        IApplicationDbContext context,
+        IAuthRepository authRepository,
         ILogger<GetCurrentUserQueryHandler> logger)
     {
-        _context = context;
+        _authRepository = authRepository;
         _logger = logger;
     }
 
@@ -27,28 +26,23 @@ public class GetCurrentUserQueryHandler : IRequestHandler<GetCurrentUserQuery, R
     {
         _logger.LogDebug("Getting current user profile for {UserId}", request.UserId);
 
-        var user = await _context.UserInfos
-            .Where(u => u.DivSeq == request.DivSeq && u.UserId == request.UserId && u.UseYn == "Y")
-            .FirstOrDefaultAsync(cancellationToken);
+        var user = await _authRepository.GetUserForAuthAsync(request.UserId, request.DivSeq, cancellationToken);
 
-        if (user is null)
+        if (user is null || user.UseYn != "Y")
         {
             _logger.LogWarning("User {UserId} not found", request.UserId);
             return Result<UserProfileDto>.Failure("User not found.");
         }
 
-        // Load permissions (fallback to empty list if SPC_ROLE_PERMISSION table doesn't exist)
         var permissions = new List<string>();
         try
         {
-            permissions = await _context.RolePermissions
-                .Where(rp => rp.DivSeq == request.DivSeq && rp.RoleCode == user.RoleId && rp.UseYn == "Y")
-                .Select(rp => rp.PermissionCode)
-                .ToListAsync(cancellationToken);
+            permissions = (await _authRepository.GetRolePermissionsAsync(
+                request.DivSeq, user.RoleId ?? string.Empty, cancellationToken)).ToList();
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "RolePermissions table not available, returning empty permissions");
+            _logger.LogWarning(ex, "RolePermissions not available, returning empty permissions");
         }
 
         return Result<UserProfileDto>.Success(new UserProfileDto

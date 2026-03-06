@@ -3,130 +3,157 @@ using Sphere.Application.DTOs.Auth;
 namespace Sphere.Application.Interfaces.Repositories;
 
 /// <summary>
-/// Auth repository interface for authentication and authorization stored procedure operations.
+/// Auth 리포지토리 인터페이스 - 인증/인가 SP 및 직접 SQL 작업
 /// </summary>
 public interface IAuthRepository
 {
-    #region User Authentication Methods
+    #region 사용자 조회
 
     /// <summary>
-    /// Gets login user information for authentication.
+    /// 로그인용 전체 사용자 정보 조회 (USP_SPC_LOGIN_USER_SELECT 또는 raw SQL)
     /// </summary>
-    /// <param name="userId">User ID</param>
-    /// <param name="divSeq">Division sequence</param>
-    /// <param name="cancellationToken">Cancellation token</param>
-    /// <returns>Login user info DTO or null if not found</returns>
     Task<LoginUserInfoDto?> GetLoginUserInfoAsync(
         string userId,
         string divSeq,
         CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Gets user information by user ID and division.
+    /// 사용자 상세 정보 조회 (UserInfoDto 반환)
     /// </summary>
-    /// <param name="userId">User ID</param>
-    /// <param name="divSeq">Division sequence</param>
-    /// <param name="cancellationToken">Cancellation token</param>
-    /// <returns>User info DTO or null if not found</returns>
     Task<UserInfoDto?> GetUserInfoByIdAsync(
         string userId,
         string divSeq,
         CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Validates user password against stored hash.
+    /// 로그인 인증용 사용자 데이터 조회 (PasswordHash, FailCount, IsLocked 포함)
     /// </summary>
-    /// <param name="userId">User ID</param>
-    /// <param name="passwordHash">Password hash to validate</param>
-    /// <param name="cancellationToken">Cancellation token</param>
-    /// <returns>True if password is valid, false otherwise</returns>
+    Task<UserAuthDto?> GetUserForAuthAsync(
+        string userId,
+        string divSeq,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// 비밀번호 해시 검증
+    /// </summary>
     Task<bool> ValidatePasswordAsync(
         string userId,
         string passwordHash,
         CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Updates the last login timestamp for a user.
+    /// 역할별 권한 코드 목록 조회
     /// </summary>
-    /// <param name="userId">User ID</param>
-    /// <param name="loginTime">Login timestamp</param>
-    /// <param name="cancellationToken">Cancellation token</param>
+    Task<IEnumerable<string>> GetRolePermissionsAsync(
+        string divSeq,
+        string roleCode,
+        CancellationToken cancellationToken = default);
+
+    #endregion
+
+    #region 사용자 업데이트
+
+    /// <summary>
+    /// 로그인 실패 카운트 및 잠금 상태 업데이트
+    /// </summary>
+    Task UpdateLoginFailAsync(
+        string userId,
+        string divSeq,
+        int failCount,
+        string isLocked,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// 로그인 성공: 실패 카운트 초기화 + 마지막 로그인 시간 갱신
+    /// </summary>
+    Task UpdateLoginSuccessAsync(
+        string userId,
+        string divSeq,
+        DateTime loginTime,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// 마지막 로그인 시간 갱신 (OTP 인증 후 사용)
+    /// </summary>
     Task UpdateLastLoginAsync(
         string userId,
         DateTime loginTime,
         CancellationToken cancellationToken = default);
 
-    #endregion
-
-    #region Authority Filter Methods
+    /// <summary>
+    /// 비밀번호 변경
+    /// </summary>
+    Task UpdatePasswordHashAsync(
+        string userId,
+        string divSeq,
+        string newPasswordHash,
+        string updateUserId,
+        CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Gets authority filter dropdown data. (USP_SPC_AUTHORITY_FILTER_SELECT)
+    /// 비밀번호 초기화: 새 해시 설정 + 잠금 해제 + 실패 카운트 초기화
     /// </summary>
-    /// <param name="query">Authority filter query parameters</param>
-    /// <param name="cancellationToken">Cancellation token</param>
-    /// <returns>Collection of authority filter results</returns>
+    Task ResetAndUnlockUserAsync(
+        string userId,
+        string divSeq,
+        string newPasswordHash,
+        CancellationToken cancellationToken = default);
+
+    #endregion
+
+    #region 세션
+
+    /// <summary>
+    /// 활성 세션 조회
+    /// </summary>
+    Task<UserSessionDto?> GetActiveSessionAsync(
+        string userId,
+        string divSeq,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// 세션 활성 상태 업데이트
+    /// </summary>
+    Task UpdateSessionActiveAsync(
+        string userId,
+        string divSeq,
+        string isActive,
+        CancellationToken cancellationToken = default);
+
+    #endregion
+
+    #region 권한 필터
+
+    /// <summary>
+    /// 권한 필터 드롭다운 조회 (USP_SPC_AUTHORITY_FILTER_SELECT)
+    /// </summary>
     Task<IEnumerable<AuthorityFilterResultDto>> GetAuthorityFiltersAsync(
         AuthorityFilterRequestDto query,
         CancellationToken cancellationToken = default);
 
     #endregion
 
-    #region Oath Management Methods
+    #region Oath 관리
 
-    /// <summary>
-    /// Gets oath master list. (USP_SPC_OATH_MST_SELECT)
-    /// </summary>
-    /// <param name="filter">Oath master filter parameters</param>
-    /// <param name="cancellationToken">Cancellation token</param>
-    /// <returns>Collection of oath master records</returns>
     Task<IEnumerable<OathMasterDto>> GetOathMasterListAsync(
         OathMasterFilterDto filter,
         CancellationToken cancellationToken = default);
 
-    /// <summary>
-    /// Gets oath info for login. (USP_SPC_OATH_MST_SELECT_LOGIN)
-    /// </summary>
-    /// <param name="divSeq">Division sequence</param>
-    /// <param name="userId">User ID</param>
-    /// <param name="cancellationToken">Cancellation token</param>
-    /// <returns>Collection of oath login records</returns>
     Task<IEnumerable<OathLoginDto>> GetOathForLoginAsync(
         string divSeq,
         string userId,
         CancellationToken cancellationToken = default);
 
-    /// <summary>
-    /// Gets oath login link info. (TODO [P3]: No DB USP - use USP_SPC_OATH_MST_SELECT_LOGIN)
-    /// </summary>
-    /// <param name="divSeq">Division sequence</param>
-    /// <param name="oathId">Oath ID</param>
-    /// <param name="cancellationToken">Cancellation token</param>
-    /// <returns>Oath login link DTO or null if not found</returns>
     Task<OathLoginLinkDto?> GetOathLoginLinkAsync(
         string divSeq,
         string oathId,
         CancellationToken cancellationToken = default);
 
-    /// <summary>
-    /// Gets oath history. (USP_SPC_OATH_MST_HIST_SELECT)
-    /// </summary>
-    /// <param name="divSeq">Division sequence</param>
-    /// <param name="oathId">Oath ID</param>
-    /// <param name="cancellationToken">Cancellation token</param>
-    /// <returns>Collection of oath history records</returns>
     Task<IEnumerable<OathHistoryDto>> GetOathHistoryAsync(
         string divSeq,
         string oathId,
         CancellationToken cancellationToken = default);
 
-    /// <summary>
-    /// Gets oath document. (USP_SPC_OATH_DOC_SELECT)
-    /// </summary>
-    /// <param name="divSeq">Division sequence</param>
-    /// <param name="oathDocId">Oath document ID</param>
-    /// <param name="cancellationToken">Cancellation token</param>
-    /// <returns>Oath document DTO or null if not found</returns>
     Task<OathDocumentDto?> GetOathDocumentAsync(
         string divSeq,
         string oathDocId,

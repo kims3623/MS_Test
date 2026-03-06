@@ -1,9 +1,8 @@
 using MediatR;
-using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
-using Sphere.Application.Common.Interfaces;
 using Sphere.Application.Common.Models;
 using Sphere.Application.DTOs.Auth;
+using Sphere.Application.Interfaces.Repositories;
 
 namespace Sphere.Application.Features.Users.Queries.GetUserById;
 
@@ -12,14 +11,14 @@ namespace Sphere.Application.Features.Users.Queries.GetUserById;
 /// </summary>
 public class GetUserByIdQueryHandler : IRequestHandler<GetUserByIdQuery, Result<UserProfileDto>>
 {
-    private readonly IApplicationDbContext _context;
+    private readonly IAuthRepository _authRepository;
     private readonly ILogger<GetUserByIdQueryHandler> _logger;
 
     public GetUserByIdQueryHandler(
-        IApplicationDbContext context,
+        IAuthRepository authRepository,
         ILogger<GetUserByIdQueryHandler> logger)
     {
-        _context = context;
+        _authRepository = authRepository;
         _logger = logger;
     }
 
@@ -27,26 +26,20 @@ public class GetUserByIdQueryHandler : IRequestHandler<GetUserByIdQuery, Result<
     {
         _logger.LogInformation("Fetching user profile for {UserId}", request.UserId);
 
-        var user = await _context.UserInfos
-            .Where(u => u.DivSeq == request.DivSeq && u.UserId == request.UserId && u.UseYn == "Y")
-            .FirstOrDefaultAsync(cancellationToken);
+        var user = await _authRepository.GetUserForAuthAsync(request.UserId, request.DivSeq, cancellationToken);
 
-        if (user is null)
+        if (user is null || user.UseYn != "Y")
         {
             _logger.LogWarning("User {UserId} not found", request.UserId);
             return Result<UserProfileDto>.Failure("User not found.");
         }
 
-        // Load permissions for the user's role
-        var permissions = await _context.RolePermissions
-            .Where(rp => rp.RoleCode == user.RoleId && rp.GrantedYn == "Y")
-            .Select(rp => rp.PermissionCode)
-            .Distinct()
-            .ToListAsync(cancellationToken);
+        var permissions = (await _authRepository.GetRolePermissionsAsync(
+            request.DivSeq, user.RoleId ?? string.Empty, cancellationToken)).ToList();
 
         _logger.LogInformation("Loaded {PermissionCount} permissions for user {UserId}", permissions.Count, request.UserId);
 
-        var profile = new UserProfileDto
+        return Result<UserProfileDto>.Success(new UserProfileDto
         {
             UserId = user.UserId,
             UserName = user.UserName,
@@ -59,8 +52,6 @@ public class GetUserByIdQueryHandler : IRequestHandler<GetUserByIdQuery, Result<
             Language = user.Locale,
             Timezone = user.Timezone,
             Permissions = permissions
-        };
-
-        return Result<UserProfileDto>.Success(profile);
+        });
     }
 }

@@ -1,10 +1,9 @@
 using MediatR;
-using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Sphere.Application.Common.Interfaces;
 using Sphere.Application.Common.Models;
 using Sphere.Application.DTOs.Auth;
-using Sphere.Domain.Entities.Auth;
+using Sphere.Application.Interfaces.Repositories;
 
 namespace Sphere.Application.Features.Auth.Commands.Login;
 
@@ -13,20 +12,20 @@ namespace Sphere.Application.Features.Auth.Commands.Login;
 /// </summary>
 public class LoginCommandHandler : IRequestHandler<LoginCommand, Result<LoginResponseDto>>
 {
-    private readonly IApplicationDbContext _context;
+    private readonly IAuthRepository _authRepository;
     private readonly IJwtTokenService _jwtTokenService;
     private readonly IPasswordHasher _passwordHasher;
     private readonly IDateTimeService _dateTimeService;
     private readonly ILogger<LoginCommandHandler> _logger;
 
     public LoginCommandHandler(
-        IApplicationDbContext context,
+        IAuthRepository authRepository,
         IJwtTokenService jwtTokenService,
         IPasswordHasher passwordHasher,
         IDateTimeService dateTimeService,
         ILogger<LoginCommandHandler> logger)
     {
-        _context = context;
+        _authRepository = authRepository;
         _jwtTokenService = jwtTokenService;
         _passwordHasher = passwordHasher;
         _dateTimeService = dateTimeService;
@@ -37,25 +36,20 @@ public class LoginCommandHandler : IRequestHandler<LoginCommand, Result<LoginRes
     {
         _logger.LogInformation("Login attempt for user {UserId} in division {DivSeq}", request.UserId, request.DivSeq);
 
-        // 1. Find user
-        var user = await _context.UserInfos
-            .Where(u => u.DivSeq == request.DivSeq && u.UserId == request.UserId && u.UseYn == "Y")
-            .FirstOrDefaultAsync(cancellationToken);
+        var user = await _authRepository.GetUserForAuthAsync(request.UserId, request.DivSeq, cancellationToken);
 
-        if (user is null)
+        if (user is null || user.UseYn != "Y")
         {
             _logger.LogWarning("Login failed: User {UserId} not found", request.UserId);
             return Result<LoginResponseDto>.Failure("Invalid user ID or password.");
         }
 
-        // 2. Check if account is locked
         if (user.IsLocked == "Y")
         {
             _logger.LogWarning("Login failed: User {UserId} account is locked", request.UserId);
             return Result<LoginResponseDto>.Failure("Account is locked. Please contact administrator.");
         }
 
-        // 3. Verify password (from UserInfo table)
         var storedHash = user.PasswordHash ?? string.Empty;
         _logger.LogDebug("Password verification for {UserId}: hash length={Length}, format={Format}",
             request.UserId, storedHash.Length,
@@ -63,33 +57,26 @@ public class LoginCommandHandler : IRequestHandler<LoginCommand, Result<LoginRes
 
         if (!_passwordHasher.Verify(request.Password, storedHash))
         {
-            // Increment fail count
-            user.FailCount++;
+            var newFailCount = user.FailCount + 1;
+            var isLocked = newFailCount >= 5 ? "Y" : "N";
             _logger.LogWarning("Login failed: Invalid password for user {UserId} (attempt {FailCount}/5)",
-                request.UserId, user.FailCount);
-            if (user.FailCount >= 5)
-            {
-                user.IsLocked = "Y";
-                _logger.LogWarning("User {UserId} account locked after {FailCount} failed attempts", request.UserId, user.FailCount);
-            }
-            await _context.SaveChangesAsync(cancellationToken);
+                request.UserId, newFailCount);
+            if (isLocked == "Y")
+                _logger.LogWarning("User {UserId} account locked after {FailCount} failed attempts", request.UserId, newFailCount);
 
+            await _authRepository.UpdateLoginFailAsync(request.UserId, request.DivSeq, newFailCount, isLocked, cancellationToken);
             return Result<LoginResponseDto>.Failure("Invalid user ID or password.");
         }
 
-        // 4. Reset fail count on successful login
-        user.FailCount = 0;
-        user.LastLoginDate = _dateTimeService.Now;
-        await _context.SaveChangesAsync(cancellationToken);
+        await _authRepository.UpdateLoginSuccessAsync(request.UserId, request.DivSeq, _dateTimeService.Now, cancellationToken);
 
-        // 5. OTP requirement (disabled - not in current DB schema)
+        // OTP requirement (disabled - not in current DB schema)
         var requiresOtp = false;
         string? otpSessionId = null;
 
-        // 6. Load user permissions (disabled - SPC_ROLE_PERMISSION table doesn't exist yet)
+        // Load user permissions (disabled - SPC_ROLE_PERMISSION table doesn't exist yet)
         var permissions = new List<string>();
 
-        // 7. Generate tokens
         var userProfile = new UserProfileDto
         {
             UserId = user.UserId,

@@ -1,6 +1,5 @@
 using MediatR;
 using Microsoft.Extensions.Logging;
-using Sphere.Application.Common.Interfaces;
 using Sphere.Application.Common.Models;
 using Sphere.Application.DTOs.System;
 
@@ -11,14 +10,10 @@ namespace Sphere.Application.Features.System.Commands.DeleteMenu;
 /// </summary>
 public class DeleteMenuCommandHandler : IRequestHandler<DeleteMenuCommand, Result<DeleteMenuResponseDto>>
 {
-    private readonly IApplicationDbContext _context;
     private readonly ILogger<DeleteMenuCommandHandler> _logger;
 
-    public DeleteMenuCommandHandler(
-        IApplicationDbContext context,
-        ILogger<DeleteMenuCommandHandler> logger)
+    public DeleteMenuCommandHandler(ILogger<DeleteMenuCommandHandler> logger)
     {
-        _context = context;
         _logger = logger;
     }
 

@@ -1,8 +1,8 @@
 using MediatR;
-using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Sphere.Application.Common.Interfaces;
 using Sphere.Application.Common.Models;
+using Sphere.Application.Interfaces.Repositories;
 
 namespace Sphere.Application.Features.Auth.Commands.GetOtpCode;
 
@@ -12,16 +12,16 @@ namespace Sphere.Application.Features.Auth.Commands.GetOtpCode;
 /// </summary>
 public class GetOtpCodeCommandHandler : IRequestHandler<GetOtpCodeCommand, Result<GetOtpCodeResponse>>
 {
-    private readonly IApplicationDbContext _context;
+    private readonly IAuthRepository _authRepository;
     private readonly IOtpService _otpService;
     private readonly ILogger<GetOtpCodeCommandHandler> _logger;
 
     public GetOtpCodeCommandHandler(
-        IApplicationDbContext context,
+        IAuthRepository authRepository,
         IOtpService otpService,
         ILogger<GetOtpCodeCommandHandler> logger)
     {
-        _context = context;
+        _authRepository = authRepository;
         _otpService = otpService;
         _logger = logger;
     }
@@ -30,18 +30,15 @@ public class GetOtpCodeCommandHandler : IRequestHandler<GetOtpCodeCommand, Resul
     {
         _logger.LogInformation("OTP code generation request for user {UserId}", request.UserId);
 
-        // 1. Find user
-        var user = await _context.UserInfos
-            .Where(u => u.DivSeq == request.DivSeq && u.UserId == request.UserId && u.UseYn == "Y")
-            .FirstOrDefaultAsync(cancellationToken);
+        var user = await _authRepository.GetUserForAuthAsync(request.UserId, request.DivSeq, cancellationToken);
 
-        if (user is null)
+        if (user is null || user.UseYn != "Y")
         {
             _logger.LogWarning("OTP generation failed: User {UserId} not found", request.UserId);
             return Result<GetOtpCodeResponse>.Failure("User not found.");
         }
 
-        // 2. OTP is not supported in current DB schema
+        // OTP is not supported in current DB schema
         _logger.LogWarning("OTP generation failed: OTP not enabled for user {UserId} (feature not supported)", request.UserId);
         return Result<GetOtpCodeResponse>.Failure("OTP is not enabled for this user.");
     }

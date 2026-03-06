@@ -1,6 +1,5 @@
 using MediatR;
 using Microsoft.Extensions.Logging;
-using Sphere.Application.Common.Interfaces;
 using Sphere.Application.Common.Models;
 using Sphere.Application.DTOs.System;
 
@@ -11,14 +10,10 @@ namespace Sphere.Application.Features.System.Commands.UpdateRole;
 /// </summary>
 public class UpdateRoleCommandHandler : IRequestHandler<UpdateRoleCommand, Result<UpdateRoleResponseDto>>
 {
-    private readonly IApplicationDbContext _context;
     private readonly ILogger<UpdateRoleCommandHandler> _logger;
 
-    public UpdateRoleCommandHandler(
-        IApplicationDbContext context,
-        ILogger<UpdateRoleCommandHandler> logger)
+    public UpdateRoleCommandHandler(ILogger<UpdateRoleCommandHandler> logger)
     {
-        _context = context;
         _logger = logger;
     }
 

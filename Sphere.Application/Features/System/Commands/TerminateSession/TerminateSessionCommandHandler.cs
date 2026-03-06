@@ -1,6 +1,5 @@
 using MediatR;
 using Microsoft.Extensions.Logging;
-using Sphere.Application.Common.Interfaces;
 using Sphere.Application.Common.Models;
 using Sphere.Application.DTOs.System;
 
@@ -11,14 +10,10 @@ namespace Sphere.Application.Features.System.Commands.TerminateSession;
 /// </summary>
 public class TerminateSessionCommandHandler : IRequestHandler<TerminateSessionCommand, Result<TerminateSessionResponseDto>>
 {
-    private readonly IApplicationDbContext _context;
     private readonly ILogger<TerminateSessionCommandHandler> _logger;
 
-    public TerminateSessionCommandHandler(
-        IApplicationDbContext context,
-        ILogger<TerminateSessionCommandHandler> logger)
+    public TerminateSessionCommandHandler(ILogger<TerminateSessionCommandHandler> logger)
     {
-        _context = context;
         _logger = logger;
     }
 

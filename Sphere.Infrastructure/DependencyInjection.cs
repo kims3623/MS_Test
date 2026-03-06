@@ -1,7 +1,6 @@
 using System.Data;
 using Dapper;
 using Microsoft.Data.SqlClient;
-using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Sphere.Application.Common.Interfaces;
@@ -10,7 +9,6 @@ using Sphere.Application.Interfaces.Repositories;
 using Sphere.Infrastructure.Identity;
 using Sphere.Infrastructure.Persistence;
 using Sphere.Infrastructure.Persistence.Repositories.Dapper;
-using Sphere.Infrastructure.Persistence.Repositories.EF;
 using Sphere.Infrastructure.Services;
 
 namespace Sphere.Infrastructure;
@@ -24,25 +22,19 @@ public static class DependencyInjection
         this IServiceCollection services,
         IConfiguration configuration)
     {
-        // Enable Dapper snake_case → PascalCase column mapping
-        // SP returns columns like div_seq, spec_sys_id → maps to DivSeq, SpecSysId
+        var connectionString = configuration.GetConnectionString("DefaultConnection")
+            ?? throw new InvalidOperationException("Connection string 'DefaultConnection' not found.");
+
+        // Dapper global: DB 컬럼(snake_case) → C# 프로퍼티(PascalCase) 자동 매핑
         DefaultTypeMap.MatchNamesWithUnderscores = true;
 
-        // Database Context
-        var connectionString = configuration.GetConnectionString("DefaultConnection");
+        // IDbConnection - Scoped (요청마다 새 커넥션)
+        services.AddScoped<IDbConnection>(_ => new SqlConnection(connectionString));
 
-        services.AddDbContext<ApplicationDbContext>(options =>
-            options.UseSqlServer(connectionString,
-                builder => builder.MigrationsAssembly(typeof(ApplicationDbContext).Assembly.FullName)));
+        // IDbConnectionFactory - 여러 커넥션이 필요한 레포지토리용
+        services.AddScoped<IDbConnectionFactory>(_ => new SqlConnectionFactory(connectionString));
 
-        services.AddScoped<IApplicationDbContext>(provider =>
-            provider.GetRequiredService<ApplicationDbContext>());
-
-        // Dapper IDbConnection for stored procedures
-        services.AddScoped<IDbConnection>(sp =>
-            new SqlConnection(connectionString));
-
-        // Dapper Repositories (21 USPs)
+        // Dapper Repositories
         services.AddScoped<IApprovalRepository, ApprovalRepository>();
         services.AddScoped<IAuthRepository, AuthRepository>();
         services.AddScoped<IAlarmRepository, AlarmRepository>();
@@ -52,7 +44,7 @@ public static class DependencyInjection
         services.AddScoped<ISPCRepository, SPCRepository>();
         services.AddScoped<IReportsRepository, ReportsRepository>();
 
-        // Master Data Repositories (B3 batch)
+        // Master Data Repositories
         services.AddScoped<ICodeMasterRepository, CodeMasterRepository>();
         services.AddScoped<IMaterialMasterRepository, MaterialMasterRepository>();
         services.AddScoped<IVendorMasterRepository, VendorMasterRepository>();
@@ -64,11 +56,14 @@ public static class DependencyInjection
         // System Repository
         services.AddScoped<ISystemRepository, SystemRepository>();
 
-        // EF Core Repositories
+        // Favorite Repository (Dapper)
         services.AddScoped<IFavoriteRepository, FavoriteRepository>();
 
-        // Dapper Notification Repository
+        // Notification Repository
         services.AddScoped<INotificationRepository, NotificationRepository>();
+
+        // Account Repository
+        services.AddScoped<IAccountRepository, AccountRepository>();
 
         // OTP Service
         services.AddScoped<IOtpService, OtpService>();

@@ -1,22 +1,21 @@
 using MediatR;
-using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
-using Sphere.Application.Common.Interfaces;
 using Sphere.Application.Common.Models;
 using Sphere.Application.DTOs.Approval;
+using Sphere.Application.Interfaces.Repositories;
 
 namespace Sphere.Application.Features.Approvals.Queries.GetApprovalDetailList;
 
 public class GetApprovalDetailListQueryHandler : IRequestHandler<GetApprovalDetailListQuery, Result<ApprovalDetailListResponseDto>>
 {
-    private readonly IApplicationDbContext _context;
+    private readonly IApprovalRepository _approvalRepository;
     private readonly ILogger<GetApprovalDetailListQueryHandler> _logger;
 
     public GetApprovalDetailListQueryHandler(
-        IApplicationDbContext context,
+        IApprovalRepository approvalRepository,
         ILogger<GetApprovalDetailListQueryHandler> logger)
     {
-        _context = context;
+        _approvalRepository = approvalRepository;
         _logger = logger;
     }
 
@@ -24,31 +23,23 @@ public class GetApprovalDetailListQueryHandler : IRequestHandler<GetApprovalDeta
     {
         _logger.LogInformation("Getting approval detail list for {AprovId}", request.AprovId);
 
-        var approvals = await _context.Approvals
-            .Where(a => a.DivSeq == request.DivSeq && a.AprovId == request.AprovId)
-            .ToListAsync(cancellationToken);
-
-        var histories = await _context.ApprovalHistories
-            .Where(h => h.DivSeq == request.DivSeq && h.AprovId == request.AprovId)
-            .OrderBy(h => h.ActionDate)
-            .ToListAsync(cancellationToken);
+        var histories = await _approvalRepository.GetApprovalHistoriesAsync(
+            request.DivSeq, request.AprovId, cancellationToken);
 
         var items = histories.Select(h => new ApprovalDetailListItemDto
         {
-            AprovId = h.AprovId,
+            AprovId = request.AprovId,
             Action = h.Action,
-            ApproverId = h.ApproverId,
-            ActionDate = h.ActionDate?.ToString("yyyy-MM-dd HH:mm:ss") ?? string.Empty,
-            Comment = h.Comment
+            ApproverId = h.UserId,
+            ActionDate = h.ActionDate,
+            Comment = h.Comment ?? string.Empty
         }).ToList();
 
-        var response = new ApprovalDetailListResponseDto
+        return Result<ApprovalDetailListResponseDto>.Success(new ApprovalDetailListResponseDto
         {
             AprovId = request.AprovId,
             Items = items,
             TotalCount = items.Count
-        };
-
-        return Result<ApprovalDetailListResponseDto>.Success(response);
+        });
     }
 }

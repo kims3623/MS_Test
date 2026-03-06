@@ -10,3 +10,16 @@ D:\Source\Sphere\src\Sphere.Domain\obj\Debug\net8.0\Sphere.Domain.dll
 D:\Source\Sphere\src\Sphere.Domain\obj\Debug\net8.0\refint\Sphere.Domain.dll
 D:\Source\Sphere\src\Sphere.Domain\obj\Debug\net8.0\Sphere.Domain.pdb
 D:\Source\Sphere\src\Sphere.Domain\obj\Debug\net8.0\ref\Sphere.Domain.dll
+D:\Source\MS_TEST\Sphere.Domain\bin\Debug\net8.0\Sphere.Domain.deps.json
+D:\Source\MS_TEST\Sphere.Domain\bin\Debug\net8.0\Sphere.Domain.dll
+D:\Source\MS_TEST\Sphere.Domain\bin\Debug\net8.0\Sphere.Domain.pdb
+D:\Source\MS_TEST\Sphere.Domain\obj\Debug\net8.0\Sphere.Domain.csproj.AssemblyReference.cache
+D:\Source\MS_TEST\Sphere.Domain\obj\Debug\net8.0\Sphere.Domain.GeneratedMSBuildEditorConfig.editorconfig
+D:\Source\MS_TEST\Sphere.Domain\obj\Debug\net8.0\Sphere.Domain.AssemblyInfoInputs.cache
+D:\Source\MS_TEST\Sphere.Domain\obj\Debug\net8.0\Sphere.Domain.AssemblyInfo.cs
+D:\Source\MS_TEST\Sphere.Domain\obj\Debug\net8.0\Sphere.Domain.csproj.CoreCompileInputs.cache
+D:\Source\MS_TEST\Sphere.Domain\obj\Debug\net8.0\Sphere.Domain.sourcelink.json
+D:\Source\MS_TEST\Sphere.Domain\obj\Debug\net8.0\Sphere.Domain.dll
+D:\Source\MS_TEST\Sphere.Domain\obj\Debug\net8.0\refint\Sphere.Domain.dll
+D:\Source\MS_TEST\Sphere.Domain\obj\Debug\net8.0\Sphere.Domain.pdb
+D:\Source\MS_TEST\Sphere.Domain\obj\Debug\net8.0\ref\Sphere.Domain.dll

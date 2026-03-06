@@ -1,8 +1,8 @@
 using MediatR;
-using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Sphere.Application.Common.Interfaces;
 using Sphere.Application.Common.Models;
+using Sphere.Application.Interfaces.Repositories;
 
 namespace Sphere.Application.Features.Auth.Commands.ResetPassword;
 
@@ -11,20 +11,17 @@ namespace Sphere.Application.Features.Auth.Commands.ResetPassword;
 /// </summary>
 public class ResetPasswordCommandHandler : IRequestHandler<ResetPasswordCommand, Result<ResetPasswordResponse>>
 {
-    private readonly IApplicationDbContext _context;
+    private readonly IAuthRepository _authRepository;
     private readonly IPasswordHasher _passwordHasher;
-    private readonly IDateTimeService _dateTimeService;
     private readonly ILogger<ResetPasswordCommandHandler> _logger;
 
     public ResetPasswordCommandHandler(
-        IApplicationDbContext context,
+        IAuthRepository authRepository,
         IPasswordHasher passwordHasher,
-        IDateTimeService dateTimeService,
         ILogger<ResetPasswordCommandHandler> logger)
     {
-        _context = context;
+        _authRepository = authRepository;
         _passwordHasher = passwordHasher;
-        _dateTimeService = dateTimeService;
         _logger = logger;
     }
 
@@ -32,12 +29,11 @@ public class ResetPasswordCommandHandler : IRequestHandler<ResetPasswordCommand,
     {
         _logger.LogInformation("Password reset request for user {UserId}", request.UserId);
 
-        // 1. Find user by ID and email (password is stored in UserInfo table)
-        var user = await _context.UserInfos
-            .Where(u => u.DivSeq == request.DivSeq && u.UserId == request.UserId && u.Email == request.Email && u.UseYn == "Y")
-            .FirstOrDefaultAsync(cancellationToken);
+        var user = await _authRepository.GetUserForAuthAsync(request.UserId, request.DivSeq, cancellationToken);
 
-        if (user is null)
+        // Validate user exists and email matches
+        if (user is null || user.UseYn != "Y" ||
+            !string.Equals(user.Email, request.Email, StringComparison.OrdinalIgnoreCase))
         {
             _logger.LogWarning("Password reset failed: User {UserId} not found or email mismatch", request.UserId);
             // Return success to prevent user enumeration
@@ -48,19 +44,12 @@ public class ResetPasswordCommandHandler : IRequestHandler<ResetPasswordCommand,
             });
         }
 
-        // 2. Generate temporary password and update UserInfo
         var tempPassword = GenerateTemporaryPassword();
-        user.PasswordHash = _passwordHasher.Hash(tempPassword);
-        user.UpdateDate = _dateTimeService.Now;
+        var newHash = _passwordHasher.Hash(tempPassword);
 
-        // 3. Reset fail count and unlock account
-        user.FailCount = 0;
-        user.IsLocked = "N";
-
-        await _context.SaveChangesAsync(cancellationToken);
+        await _authRepository.ResetAndUnlockUserAsync(request.UserId, request.DivSeq, newHash, cancellationToken);
 
         // Note: In production, send email with temporary password
-        // For now, log it (should be replaced with email service)
         _logger.LogInformation("Password reset successful for user {UserId}. Temporary password generated.", request.UserId);
 
         return Result<ResetPasswordResponse>.Success(new ResetPasswordResponse

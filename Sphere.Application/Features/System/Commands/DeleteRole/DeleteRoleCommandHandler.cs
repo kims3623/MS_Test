@@ -1,6 +1,5 @@
 using MediatR;
 using Microsoft.Extensions.Logging;
-using Sphere.Application.Common.Interfaces;
 using Sphere.Application.Common.Models;
 using Sphere.Application.DTOs.System;
 
@@ -11,14 +10,10 @@ namespace Sphere.Application.Features.System.Commands.DeleteRole;
 /// </summary>
 public class DeleteRoleCommandHandler : IRequestHandler<DeleteRoleCommand, Result<DeleteRoleResponseDto>>
 {
-    private readonly IApplicationDbContext _context;
     private readonly ILogger<DeleteRoleCommandHandler> _logger;
 
-    public DeleteRoleCommandHandler(
-        IApplicationDbContext context,
-        ILogger<DeleteRoleCommandHandler> logger)
+    public DeleteRoleCommandHandler(ILogger<DeleteRoleCommandHandler> logger)
     {
-        _context = context;
         _logger = logger;
     }
 

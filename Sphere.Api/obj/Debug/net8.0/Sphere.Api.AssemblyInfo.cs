@@ -15,7 +15,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("Sphere.Api")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+f397a6507642597c7da67a0ba48b7cde5e68be1c")]
 [assembly: System.Reflection.AssemblyProductAttribute("Sphere.Api")]
 [assembly: System.Reflection.AssemblyTitleAttribute("Sphere.Api")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]

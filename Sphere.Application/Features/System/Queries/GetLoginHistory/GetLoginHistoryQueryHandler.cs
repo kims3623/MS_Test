@@ -1,6 +1,5 @@
 using MediatR;
 using Microsoft.Extensions.Logging;
-using Sphere.Application.Common.Interfaces;
 using Sphere.Application.Common.Models;
 using Sphere.Application.DTOs.System;
 
@@ -11,14 +10,10 @@ namespace Sphere.Application.Features.System.Queries.GetLoginHistory;
 /// </summary>
 public class GetLoginHistoryQueryHandler : IRequestHandler<GetLoginHistoryQuery, Result<LoginHistoryResponseDto>>
 {
-    private readonly IApplicationDbContext _context;
     private readonly ILogger<GetLoginHistoryQueryHandler> _logger;
 
-    public GetLoginHistoryQueryHandler(
-        IApplicationDbContext context,
-        ILogger<GetLoginHistoryQueryHandler> logger)
+    public GetLoginHistoryQueryHandler(ILogger<GetLoginHistoryQueryHandler> logger)
     {
-        _context = context;
         _logger = logger;
     }
 

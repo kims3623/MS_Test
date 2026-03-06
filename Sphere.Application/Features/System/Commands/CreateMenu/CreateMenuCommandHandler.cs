@@ -1,6 +1,5 @@
 using MediatR;
 using Microsoft.Extensions.Logging;
-using Sphere.Application.Common.Interfaces;
 using Sphere.Application.Common.Models;
 using Sphere.Application.DTOs.System;
 
@@ -11,14 +10,10 @@ namespace Sphere.Application.Features.System.Commands.CreateMenu;
 /// </summary>
 public class CreateMenuCommandHandler : IRequestHandler<CreateMenuCommand, Result<CreateMenuResponseDto>>
 {
-    private readonly IApplicationDbContext _context;
     private readonly ILogger<CreateMenuCommandHandler> _logger;
 
-    public CreateMenuCommandHandler(
-        IApplicationDbContext context,
-        ILogger<CreateMenuCommandHandler> logger)
+    public CreateMenuCommandHandler(ILogger<CreateMenuCommandHandler> logger)
     {
-        _context = context;
         _logger = logger;
     }
 

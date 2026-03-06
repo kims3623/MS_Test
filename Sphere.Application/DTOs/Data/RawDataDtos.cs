@@ -55,6 +55,7 @@ public class RawDataFilterDto
 /// </summary>
 public class RawDataResultDto
 {
+    public int TotalCount { get; set; }
     public long RawDataId { get; set; }
     public string SpecSysId { get; set; } = string.Empty;
     public string VendorId { get; set; } = string.Empty;

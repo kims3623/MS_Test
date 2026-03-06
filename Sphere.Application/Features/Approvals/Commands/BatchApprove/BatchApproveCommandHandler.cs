@@ -1,24 +1,24 @@
 using MediatR;
-using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Sphere.Application.Common.Interfaces;
 using Sphere.Application.Common.Models;
 using Sphere.Application.DTOs.Approval;
+using Sphere.Application.Interfaces.Repositories;
 
 namespace Sphere.Application.Features.Approvals.Commands.BatchApprove;
 
 public class BatchApproveCommandHandler : IRequestHandler<BatchApproveCommand, Result<BatchApproveResponseDto>>
 {
-    private readonly IApplicationDbContext _context;
+    private readonly IApprovalRepository _approvalRepository;
     private readonly IDateTimeService _dateTimeService;
     private readonly ILogger<BatchApproveCommandHandler> _logger;
 
     public BatchApproveCommandHandler(
-        IApplicationDbContext context,
+        IApprovalRepository approvalRepository,
         IDateTimeService dateTimeService,
         ILogger<BatchApproveCommandHandler> logger)
     {
-        _context = context;
+        _approvalRepository = approvalRepository;
         _dateTimeService = dateTimeService;
         _logger = logger;
     }
@@ -33,48 +33,35 @@ public class BatchApproveCommandHandler : IRequestHandler<BatchApproveCommand, R
 
         foreach (var aprovId in request.AprovIds)
         {
-            var approval = await _context.Approvals
-                .Where(a => a.DivSeq == request.DivSeq && a.AprovId == aprovId)
-                .FirstOrDefaultAsync(cancellationToken);
+            var affected = await _approvalRepository.UpdateApprovalStateAsync(
+                request.DivSeq, aprovId, "A", request.UserId, cancellationToken);
 
-            if (approval is null)
+            if (affected == 0)
             {
                 failCount++;
                 errors.Add($"Approval {aprovId} not found.");
                 continue;
             }
 
-            approval.AprovState = "A"; // Approved
-            approval.UpdateUserId = request.UserId;
-            approval.UpdateDate = _dateTimeService.Now;
+            await _approvalRepository.InsertApprovalHistoryAsync(
+                request.DivSeq,
+                aprovId,
+                "APPROVE",
+                request.UserId,
+                _dateTimeService.Now,
+                request.Comment,
+                cancellationToken);
 
-            var history = new Domain.Entities.Approval.ApprovalHistory
-            {
-                DivSeq = request.DivSeq,
-                AprovId = aprovId,
-                Action = "APPROVE",
-                ApproverId = request.UserId,
-                ActionDate = _dateTimeService.Now,
-                Comment = request.Comment ?? string.Empty,
-                CreateUserId = request.UserId,
-                CreateDate = _dateTimeService.Now
-            };
-
-            _context.ApprovalHistories.Add(history);
             successCount++;
         }
 
-        await _context.SaveChangesAsync(cancellationToken);
-
         _logger.LogInformation("Batch approve completed: {Success} success, {Fail} fail", successCount, failCount);
 
-        var response = new BatchApproveResponseDto
+        return Result<BatchApproveResponseDto>.Success(new BatchApproveResponseDto
         {
             SuccessCount = successCount,
             FailCount = failCount,
             Errors = errors
-        };
-
-        return Result<BatchApproveResponseDto>.Success(response);
+        });
     }
 }
